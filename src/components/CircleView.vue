@@ -17,7 +17,7 @@ const props = defineProps({
 defineEmits(['demo-copy'])
 
 // Safety cap per payment. Raise it deliberately before real use on mainnet.
-const MAX_CIRCLE_SATS = 5_000_000n // 0.05 BCH
+const MAX_CIRCLE_SATS = 200_000n // 0.002 BCH: a small safety cap for the first mainnet tests
 const FEE_BUFFER_SATS = 1000n // rough allowance for the network fee of one payment
 
 const meIdx = ref(-1) // member found from the connected wallet, -1 = the wallet is not a member
@@ -25,6 +25,7 @@ const previewIdx = ref(-1) // view-only choice when no wallet is connected
 const busyRound = ref(null)
 const errorText = ref('')
 const lastTx = ref('')
+const lastPaidText = ref('')
 let controller = null
 
 const paid = ref([]) // paid[roundIndex][memberNumber] = { txid, height }
@@ -76,10 +77,22 @@ const effCircle = computed(() =>
 const effOrder = computed(() => (ev.value ? ev.value.order : baseOrder.value))
 const rounds = computed(() => getRounds(effCircle.value, effOrder.value))
 
-// who the page shows "You owe" for: the connected wallet's member, else the preview choice
+// who the page shows "owes" for: the connected wallet's member, else the preview choice
 const viewIdx = computed(() => (meIdx.value >= 0 ? meIdx.value : previewIdx.value))
 const viewActive = computed(() => viewIdx.value >= 0 && effOrder.value.includes(viewIdx.value))
 const isActive = computed(() => meIdx.value >= 0 && effOrder.value.includes(meIdx.value))
+
+// names, so every sentence on the page says who it is about
+const meName = computed(() => (meIdx.value >= 0 ? effCircle.value.members[meIdx.value]?.name || '' : ''))
+const viewName = computed(() => (viewIdx.value >= 0 ? effCircle.value.members[viewIdx.value]?.name || '' : ''))
+const myReceiveRound = computed(() => {
+  if (meIdx.value < 0) return 0
+  return rounds.value.findIndex(r => r.recipientNo === meIdx.value + 1) + 1
+})
+const idClass = computed(() => {
+  if (!wallet.ready) return 'id-off'
+  return meIdx.value >= 0 && isActive.value ? 'id-ok' : 'id-warn'
+})
 
 async function loadDraw() {
   if (!hasDraw.value) return
@@ -151,9 +164,10 @@ watch(
   },
 )
 
+// The round whose period has started most recently (-1 = no round has started yet)
 const currentRoundIndex = computed(() => {
   const now = Date.now()
-  let idx = 0
+  let idx = -1
   rounds.value.forEach((r, i) => {
     if (new Date(r.periodStart).getTime() <= now) idx = i
   })
@@ -165,6 +179,9 @@ const canPay = computed(
   () => wallet.ready && isActive.value && busyRound.value === null && orderReady.value,
 )
 
+// A round can only be paid once its pay window has opened (so a later seat swap cannot misdirect money)
+const windowOpen = r => Date.now() >= Date.parse(r.periodStart)
+
 // 'self' | 'paid' | 'late' | 'pending' for a member number in a round
 function statusFor(roundIdx, memberNo) {
   const round = rounds.value[roundIdx]
@@ -175,6 +192,17 @@ function statusFor(roundIdx, memberNo) {
 
 // Columns of the status grid follow the payout order
 const cellStatus = (roundIdx, colIdx) => statusFor(roundIdx, rounds.value[colIdx].recipientNo)
+
+// In round i everybody except its receiver pays. These lists name who has paid and who has not.
+const payersOf = roundIdx => rounds.value.filter((_, j) => j !== roundIdx)
+const paidNames = roundIdx =>
+  payersOf(roundIdx)
+    .filter(c => paid.value[roundIdx]?.[c.recipientNo])
+    .map(c => c.recipient.name)
+const unpaidNames = roundIdx =>
+  payersOf(roundIdx)
+    .filter(c => !paid.value[roundIdx]?.[c.recipientNo])
+    .map(c => c.recipient.name)
 
 function paidCount(roundIdx) {
   return Object.keys(paid.value[roundIdx] || {}).length
@@ -237,6 +265,8 @@ watch(
     if (wallet.ready) detectMe()
     else meIdx.value = -1
     balanceInfo.value = null
+    lastTx.value = ''
+    lastPaidText.value = ''
   },
   { immediate: true },
 )
@@ -307,6 +337,7 @@ function addToCalendar() {
 async function payRound(round) {
   errorText.value = ''
   lastTx.value = ''
+  lastPaidText.value = ''
 
   if (!orderReady.value) {
     errorText.value = 'The order has not been drawn yet.'
@@ -318,6 +349,10 @@ async function payRound(round) {
   }
   if (!isActive.value) {
     errorText.value = 'The connected wallet is not an active member of this circle.'
+    return
+  }
+  if (!windowOpen(round)) {
+    errorText.value = 'This round opens on ' + round.periodStart.slice(0, 10) + '.'
     return
   }
 
@@ -335,7 +370,7 @@ async function payRound(round) {
       scan.coins,
       round.recipient.address,
       BigInt(round.amountSats),
-      `Kameti ${props.circle.name}: round ${round.round}`,
+      `Kameti ${props.circle.name}: ${meName.value} pays ${round.recipient.name}`,
       controller.signal,
       {
         opReturn: ['KAMETI', id, String(round.round), String(meIdx.value + 1)],
@@ -343,6 +378,7 @@ async function payRound(round) {
       },
     )
     lastTx.value = result.txid || 'sent'
+    lastPaidText.value = `${meName.value} paid ${round.recipient.name} ${formatBch(round.amountSats)} BCH`
     setTimeout(refreshStatus, 4000)
   } catch (e) {
     console.error('Round payment failed:', e)
@@ -361,6 +397,36 @@ async function payRound(round) {
 <template>
   <section class="circle">
     <h2>{{ circle.name }}</h2>
+
+    <div class="identity" :class="idClass">
+      <p v-if="wallet.ready && meIdx >= 0 && isActive">
+        ✅ <strong>Connected as {{ meName }}.</strong>
+        You pay the other members in their rounds<span v-if="myReceiveRound">,
+        and you receive in round {{ myReceiveRound }}</span>.
+      </p>
+      <p v-else-if="wallet.ready && meIdx >= 0">
+        <strong>Connected as {{ meName }}</strong>, who is no longer an active member of this circle.
+      </p>
+      <p v-else-if="wallet.ready">
+        ⚠ <strong>This wallet is not a member of this circle.</strong>
+        You can join if a seat is open.
+      </p>
+      <p v-else>
+        <strong>No wallet connected.</strong> You are only viewing this circle.
+        Connect your wallet above to pay.
+      </p>
+
+      <label v-if="meIdx < 0">
+        Preview as (view only, no payments):
+        <select v-model.number="previewIdx">
+          <option :value="-1">Choose a member...</option>
+          <option v-for="(m, i) in effCircle.members" :key="i" :value="i">
+            {{ m.name }}{{ effOrder.includes(i) ? '' : ' (left)' }}
+          </option>
+        </select>
+      </label>
+    </div>
+
     <p>
       {{ rounds.length }} members, {{ rounds.length }} rounds, one round every
       {{ circle.every }} {{ circle.unit }}. Each member pays
@@ -461,28 +527,6 @@ async function payRound(round) {
       </div>
     </div>
 
-    <div class="who">
-      <p v-if="wallet.ready && meIdx >= 0">
-        You are <strong>{{ effCircle.members[meIdx].name }}</strong>
-        (found from your connected wallet).
-        <span v-if="!isActive" style="color: #b45309"> You are not an active member any more.</span>
-      </p>
-      <p v-else-if="wallet.ready" style="color: #b45309">
-        The connected wallet is not a member of this circle. You can join if a seat is open.
-      </p>
-      <p v-else><small>Connect your wallet above to pay.</small></p>
-
-      <label v-if="meIdx < 0">
-        Preview as (view only, no payments):
-        <select v-model.number="previewIdx">
-          <option :value="-1">Choose a member...</option>
-          <option v-for="(m, i) in effCircle.members" :key="i" :value="i">
-            {{ m.name }}{{ effOrder.includes(i) ? '' : ' (left)' }}
-          </option>
-        </select>
-      </label>
-    </div>
-
     <EventsPanel
       v-if="orderReady"
       :circle="circle"
@@ -497,21 +541,21 @@ async function payRound(round) {
 
     <template v-if="orderReady">
       <div v-if="viewActive" class="owe">
-        <h3>You owe</h3>
+        <h3>What {{ viewName }} owes</h3>
 
         <p v-if="nextPayment" :style="{ color: nextPayment.status === 'late' ? '#dc2626' : 'inherit' }">
-          <strong>Next payment:</strong> round {{ nextPayment.round }}, pay
+          <strong>Next payment:</strong> round {{ nextPayment.round }}, {{ viewName }} pays
           <strong>{{ nextPayment.recipient.name }}</strong>
           {{ formatBch(nextPayment.amountSats) }} BCH between
           {{ nextPayment.periodStart.slice(0, 10) }} and {{ nextPayment.dueDate.slice(0, 10) }}.
           <span v-if="nextPayment.status === 'late'">⚠ This payment is late.</span>
           <span v-else>({{ windowText(nextPayment.periodStart, nextPayment.dueDate) }})</span>
         </p>
-        <p v-else>✅ All your payments are done.</p>
+        <p v-else>✅ All of {{ viewName }}'s payments are done.</p>
 
         <ul>
           <li v-for="r in myPayments" :key="r.round">
-            Round {{ r.round }}: pay <strong>{{ r.recipient.name }}</strong>
+            Round {{ r.round }}: {{ viewName }} pays <strong>{{ r.recipient.name }}</strong>
             {{ formatBch(r.amountSats) }} BCH between {{ r.periodStart.slice(0, 10) }}
             and {{ r.dueDate.slice(0, 10) }}
             <span v-if="r.status === 'paid'"> ✅ paid</span>
@@ -550,26 +594,42 @@ async function payRound(round) {
           <thead>
             <tr>
               <th>Round</th>
-              <th>Receives</th>
+              <th>Receives the money</th>
               <th>Pay window</th>
-              <th>Paid so far</th>
+              <th>Paid by</th>
+              <th>Still to pay</th>
               <th>Action</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="(r, i) in rounds" :key="r.round">
               <td>{{ r.round }}<small v-if="i === currentRoundIndex"> (current)</small></td>
-              <td>{{ r.recipient.name }}</td>
+              <td><strong>{{ r.recipient.name }}</strong></td>
               <td>{{ r.periodStart.slice(0, 10) }} to {{ r.dueDate.slice(0, 10) }}</td>
               <td>
-                {{ paidCount(i) }} of {{ rounds.length - 1 }}
-                ({{ formatBch(paidCount(i) * r.amountSats) }} BCH)
+                <span v-if="paidNames(i).length">✅ {{ paidNames(i).join(', ') }}
+                  <small>({{ formatBch(paidCount(i) * r.amountSats) }} BCH received)</small></span>
+                <span v-else>nobody yet</span>
               </td>
               <td>
-                <span v-if="viewActive && r.recipientNo === viewIdx + 1">You receive this round</span>
-                <span v-else-if="viewActive && statusFor(i, viewIdx + 1) === 'paid'">✅ You paid</span>
-                <button v-else :disabled="!canPay" @click="payRound(r)">
-                  {{ busyRound === r.round ? 'Waiting for wallet...' : 'Pay now' }}
+                <span v-if="unpaidNames(i).length">{{ unpaidNames(i).join(', ') }}</span>
+                <span v-else>✅ everyone has paid</span>
+              </td>
+              <td>
+                <span v-if="viewActive && r.recipientNo === viewIdx + 1">
+                  {{ viewName }} (you) receive this round
+                </span>
+                <span v-else-if="viewActive && statusFor(i, viewIdx + 1) === 'paid'">
+                  ✅ {{ viewName }} (you) paid {{ r.recipient.name }}
+                </span>
+                <button v-else :disabled="!canPay || !windowOpen(r)" @click="payRound(r)">
+                  {{
+                    busyRound === r.round
+                      ? 'Waiting for wallet...'
+                      : windowOpen(r)
+                        ? 'Pay ' + r.recipient.name + ' (' + formatBch(r.amountSats) + ' BCH)'
+                        : 'Opens ' + r.periodStart.slice(0, 10)
+                  }}
                 </button>
                 <button v-if="busyRound === r.round" @click="cancel">Cancel</button>
               </td>
@@ -592,12 +652,12 @@ async function payRound(round) {
           <thead>
             <tr>
               <th>Round (receiver)</th>
-              <th v-for="r in rounds" :key="r.round">{{ r.recipient.name }}</th>
+              <th v-for="r in rounds" :key="r.round">{{ r.recipient.name }} pays</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="(r, i) in rounds" :key="r.round">
-              <td>{{ r.round }} ({{ r.recipient.name }})</td>
+              <td>{{ r.round }} ({{ r.recipient.name }} receives)</td>
               <td v-for="(c, j) in rounds" :key="c.round" style="text-align: center">
                 <span v-if="cellStatus(i, j) === 'self'" title="Receiver">—</span>
                 <span v-else-if="cellStatus(i, j) === 'paid'" :title="paid[i][c.recipientNo].txid">✅</span>
@@ -610,15 +670,30 @@ async function payRound(round) {
       </div>
       <p>
         <small>
-          ✅ paid, ⏳ not yet due, ⚠ late, — receives this round. A payment counts when the
-          blockchain shows it reached the receiver with this circle's note and at least the agreed amount.
+          How to read it: each row is one round, and the name in brackets receives the money.
+          Under every other name, ✅ means that person has paid, ⏳ means not yet due, ⚠ means late,
+          and — means that person is the receiver. A payment counts when the blockchain shows it
+          reached the receiver with this circle's note and at least the agreed amount.
         </small>
       </p>
     </template>
 
     <p v-if="errorText" role="alert" style="color: #dc2626">{{ errorText }}</p>
     <p v-if="lastTx" style="overflow-wrap: anywhere">
-      ✅ Payment sent. Transaction: <code>{{ lastTx }}</code>
+      ✅ {{ lastPaidText }}. Transaction: <code>{{ lastTx }}</code>
     </p>
   </section>
 </template>
+
+<style scoped>
+.identity {
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  margin: 0.5rem 0 1rem;
+  border: 1px solid;
+}
+.identity p { margin: 0.25rem 0; }
+.id-ok { background: #ecfdf5; border-color: #6ee7b7; color: #065f46; }
+.id-warn { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
+.id-off { background: #f3f4f6; border-color: #d1d5db; color: #374151; }
+</style>

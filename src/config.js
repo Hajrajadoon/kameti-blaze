@@ -1,8 +1,7 @@
-// To go live later: NETWORK = 'mainnet' and ADDRESS_PREFIX = 'bitcoincash'
-export const NETWORK = 'chipnet'
-export const ADDRESS_PREFIX = 'bchtest'
+// To develop on the test network again: NETWORK = 'chipnet' and ADDRESS_PREFIX = 'bchtest'
+export const NETWORK = 'mainnet'
+export const ADDRESS_PREFIX = 'bitcoincash'
 
 // Blockchain data server. Leave it empty to use CashScript's own default list of servers.
-// If connections keep failing, put the hostname of a working server here, for example
-// 'electrum-chipnet.optnlabs.com'. A mainnet server is needed when you switch to mainnet.
-export const ELECTRUM_HOST = 'electrum-chipnet.optnlabs.com'
+// If connections fail, put the hostname of a working mainnet server here.
+export const ELECTRUM_HOST = ''

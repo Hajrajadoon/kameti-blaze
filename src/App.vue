@@ -12,9 +12,10 @@ import {
   DEFAULT_WINDOW_DAYS,
 } from './circle.js'
 import { getHeight } from './draw.js'
-import { ADDRESS_PREFIX } from './config.js'
+import { ADDRESS_PREFIX, NETWORK } from './config.js'
 import WalletConnect from './components/WalletConnect.vue'
 import CircleView from './components/CircleView.vue'
+   import ProjectBanner from './components/ProjectBanner.vue'
 
 // A shared link is data from someone else, so it is fully checked before it is used
 function openFromLink() {
@@ -49,8 +50,11 @@ const errors = ref([])
 const creating = ref(false)
 const copyError = ref('')
 
+// Links always point to the site root, so they work on localhost and on Vercel
 const shareLink = computed(() =>
-  circle.value ? `${location.origin}${location.pathname}#${encodeCircle(circle.value)}` : '',
+  circle.value
+    ? `${location.origin}${import.meta.env.BASE_URL}#${encodeCircle(circle.value)}`
+    : '',
 )
 
 const summary = computed(() => {
@@ -84,7 +88,10 @@ async function create() {
       drawHeight = (await getHeight()) + lead
     } catch (e) {
       console.error(e)
-      errors.value = ['Could not read the blockchain to schedule the draw. Check your connection and try again.']
+      errors.value = [
+        'Could not read the blockchain to schedule the draw: ' + (e?.message || String(e)),
+        'You can still create the circle with "Set by hand", which needs no blockchain server.',
+      ]
       creating.value = false
       return
     }
@@ -144,8 +151,16 @@ function startOver() {
 
 <template>
   <main style="max-width: 820px; margin: 2rem auto; padding: 0 1rem; font-family: system-ui">
-    <h1>Kameti.cash</h1>
-    <p>Interest-free savings circle. No custody, no fees, public proof on Bitcoin Cash.</p>
+    <h1 style="margin-bottom: 0.25rem">Kameti.cash</h1>
+           <ProjectBanner />
+    <p style="margin-top: 0">Interest-free savings circle. No custody, no fees, public proof on Bitcoin Cash.</p>
+
+    <p
+      v-if="NETWORK === 'mainnet'"
+      style="background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; padding: 0.5rem 0.75rem; border-radius: 6px"
+    >
+      <strong>Mainnet:</strong> payments here use real Bitcoin Cash. Start with small amounts and check every address.
+    </p>
 
     <WalletConnect />
 

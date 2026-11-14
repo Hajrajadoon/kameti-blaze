@@ -1,12 +1,13 @@
 <script setup>
 import { ref } from 'vue'
-
-// Fill these in as the project grows. A link left empty shows "coming soon".
-const CASHTOKENS_ADDRESS = 'bitcoincash:zzdq02x89gjyrg58j3mz4jr7r6r6uzlnag69rn2ews'
-const PRESENTATION_URL = '' // the Widget Factory presentation
-const NEW_REPO_URL = '' // the hackathon repo, created on 14 Nov
-const OLD_REPO_URL = 'https://github.com/Hajrajadoon/kameti-v1'
-const OLD_DEMO_URL = 'https://kameti-v1.vercel.app/'
+import {
+  CASHTOKENS_ADDRESS,
+  NEW_REPO_URL,
+  OLD_REPO_URL,
+  OLD_DEMO_URL,
+  PRESENTATION_URL,
+  VIDEO_URL,
+} from '../site.js'
 
 const copied = ref(false)
 async function copyAddress() {
@@ -21,41 +22,34 @@ async function copyAddress() {
 </script>
 
 <template>
-  <aside class="banner">
+  <aside class="banner" aria-label="Hackathon project information">
     <p>
-      <strong>BCH BLAZE 2026 project.</strong>
-      Presentation:
+      <strong>BCH BLAZE 2026</strong>
+      · Presentation:
       <a v-if="PRESENTATION_URL" :href="PRESENTATION_URL" target="_blank" rel="noopener noreferrer">open</a>
       <span v-else>coming soon</span>
       · Source code:
-      <a v-if="NEW_REPO_URL" :href="NEW_REPO_URL" target="_blank" rel="noopener noreferrer">GitHub (hackathon repo)</a>
-      <span v-else>coming soon</span>
+      <a :href="NEW_REPO_URL" target="_blank" rel="noopener noreferrer">GitHub (hackathon repo)</a>
+      <template v-if="VIDEO_URL"> · <a :href="VIDEO_URL" target="_blank" rel="noopener noreferrer">Video</a></template>
     </p>
     <p>
-      <strong>Pre-existing work, declared:</strong> this project was started on 20 Oct 2026, before the
-      hackathon. Old repo:
-      <a :href="OLD_REPO_URL" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <strong>Pre-existing work, declared:</strong> started 20 Oct 2026, before the hackathon.
+      Old repo: <a :href="OLD_REPO_URL" target="_blank" rel="noopener noreferrer">GitHub</a>
       · Demo from before the hackathon:
       <a :href="OLD_DEMO_URL" target="_blank" rel="noopener noreferrer">open</a>
     </p>
-    <p style="overflow-wrap: anywhere">
-      <strong>Community Choice (EMBER2026 tokens):</strong>
+    <p class="addr">
+      <strong>Community Choice (EMBER2026):</strong>
       <code>{{ CASHTOKENS_ADDRESS }}</code>
-      <button type="button" @click="copyAddress">{{ copied ? 'Copied' : 'Copy' }}</button>
+      <button type="button" class="secondary" @click="copyAddress">{{ copied ? 'Copied' : 'Copy' }}</button>
     </p>
   </aside>
 </template>
 
 <style scoped>
-.banner {
-  background: #eff6ff;
-  border: 1px solid #93c5fd;
-  color: #1e3a8a;
-  padding: 0.5rem 0.75rem;
-  border-radius: 6px;
-  margin-bottom: 1rem;
-  font-size: 0.9rem;
-}
-.banner p { margin: 0.25rem 0; }
-.banner button { margin-left: 0.5rem; padding: 0.15rem 0.5rem; font-size: 0.85rem; cursor: pointer; }
+.banner { background: #101C18; border-bottom: 1px solid var(--line); padding: 0.5rem 1rem; font-size: 0.85rem; color: var(--muted); }
+.banner p { margin: 0.2rem 0; max-width: 1080px; margin-left: auto; margin-right: auto; }
+.banner strong { color: var(--ink); }
+.addr { overflow-wrap: anywhere; }
+.addr button { min-height: 0; padding: 0.15rem 0.6rem; font-size: 0.8rem; margin-left: 0.4rem; }
 </style>

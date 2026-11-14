@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import {
   bchToSats,
   satsToBch,
@@ -15,7 +15,9 @@ import { getHeight } from './draw.js'
 import { ADDRESS_PREFIX, NETWORK } from './config.js'
 import WalletConnect from './components/WalletConnect.vue'
 import CircleView from './components/CircleView.vue'
-   import ProjectBanner from './components/ProjectBanner.vue'
+import ProjectBanner from './components/ProjectBanner.vue'
+import SiteHeader from './components/SiteHeader.vue'
+import Landing from './components/Landing.vue'
 
 // A shared link is data from someone else, so it is fully checked before it is used
 function openFromLink() {
@@ -31,6 +33,10 @@ function openFromLink() {
 
 const circle = ref(openFromLink())
 const badLink = ref(Boolean(location.hash.slice(1)) && !circle.value)
+const showCreate = ref(badLink.value)
+
+// which page is showing: the landing page, the create form, or a circle
+const view = computed(() => (circle.value ? 'circle' : showCreate.value ? 'create' : 'home'))
 
 const name = ref('')
 const amountBch = ref('0.0001')
@@ -63,6 +69,24 @@ const summary = computed(() => {
   if (!(sats > 0)) return ''
   return `${n} members, ${n} rounds. Each member pays ${satsToBch(sats)} BCH per round, and the member whose turn it is receives ${satsToBch(sats * n)} BCH in total (${n - 1} payments from others plus their own share).`
 })
+
+function go(target) {
+  circle.value = null
+  badLink.value = false
+  copyError.value = ''
+  location.hash = ''
+  showCreate.value = target === 'create'
+  window.scrollTo({ top: 0 })
+}
+
+async function scrollToSection(id) {
+  if (view.value !== 'home') {
+    go('home')
+    await nextTick()
+  }
+  await nextTick()
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+}
 
 async function create() {
   const usePriority = orderMode.value !== 'manual' && firstIdx.value >= 0
@@ -106,6 +130,7 @@ async function create() {
   })
   badLink.value = false
   location.hash = encodeCircle(circle.value)
+  window.scrollTo({ top: 0 })
 }
 
 // Turns the circle on screen into an instant demo circle (same members and settings)
@@ -140,31 +165,28 @@ function move(i, delta) {
   ;[list[i], list[j]] = [list[j], list[i]]
   members.value = list
 }
-
-function startOver() {
-  circle.value = null
-  badLink.value = false
-  copyError.value = ''
-  location.hash = ''
-}
 </script>
 
 <template>
-  <main style="max-width: 820px; margin: 2rem auto; padding: 0 1rem; font-family: system-ui">
-    <h1 style="margin-bottom: 0.25rem">Kameti.cash</h1>
-           <ProjectBanner />
-    <p style="margin-top: 0">Interest-free savings circle. No custody, no fees, public proof on Bitcoin Cash.</p>
+  <SiteHeader :view="view" @go="go" @section="scrollToSection" />
+  <ProjectBanner />
 
-    <p
-      v-if="NETWORK === 'mainnet'"
-      style="background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; padding: 0.5rem 0.75rem; border-radius: 6px"
-    >
+  <Landing v-if="view === 'home'" @create="go('create')" @section="scrollToSection" />
+
+  <!-- The wallet connection stays mounted on every page, so it survives moving around the site -->
+  <main v-show="view !== 'home'" class="app">
+    <p v-if="NETWORK === 'mainnet'" class="notice">
       <strong>Mainnet:</strong> payments here use real Bitcoin Cash. Start with small amounts and check every address.
     </p>
 
-    <WalletConnect />
+    <section class="panel">
+      <WalletConnect />
+      <p class="muted">
+        Works with Paytaca (tested). Other WizardConnect wallets such as Cashonize should work.
+      </p>
+    </section>
 
-    <p v-if="badLink" role="alert" style="color: #dc2626">
+    <p v-if="badLink" role="alert">
       This link is not a valid circle for this network. Ask the organizer for a new link.
     </p>
 
@@ -201,11 +223,9 @@ function startOver() {
           <option :value="10">10 days of each round</option>
         </select>
       </label>
-      <p>
-        <small>
-          All members pay the round's receiver inside this window, so the receiver gets the whole
-          amount at once and not in pieces through the month.
-        </small>
+      <p class="muted">
+        All members pay the round's receiver inside this window, so the receiver gets the whole
+        amount at once and not in pieces through the month.
       </p>
 
       <h3>Who receives first?</h3>
@@ -228,12 +248,10 @@ function startOver() {
           <option :value="12">after about 12 blocks (about 2 hours)</option>
         </select>
       </label>
-      <p v-if="orderMode === 'draw'">
-        <small>
-          The order is decided by a future block's hash, which nobody can predict or control.
-          Everyone must open the link and check the member list before the draw. Set the
-          first round date after the draw.
-        </small>
+      <p v-if="orderMode === 'draw'" class="muted">
+        The order is decided by a future block's hash, which nobody can predict or control.
+        Everyone must open the link and check the member list before the draw. Set the
+        first round date after the draw.
       </p>
 
       <label v-if="orderMode !== 'manual'">
@@ -243,12 +261,10 @@ function startOver() {
           <option v-for="(m, i) in members" :key="i" :value="i">{{ m.name || `Member ${i + 1}` }}</option>
         </select>
       </label>
-      <p v-if="orderMode !== 'manual' && firstIdx >= 0">
-        <small>
-          This member receives in round 1 and the draw decides everyone else. Use it when someone
-          has an urgent need and the whole group agrees <strong>before</strong> the circle starts.
-          The first receiver carries the most trust, so only agree to it if you know them.
-        </small>
+      <p v-if="orderMode !== 'manual' && firstIdx >= 0" class="muted">
+        This member receives in round 1 and the draw decides everyone else. Use it when someone
+        has an urgent need and the whole group agrees <strong>before</strong> the circle starts.
+        The first receiver carries the most trust, so only agree to it if you know them.
       </p>
 
       <h3>Members</h3>
@@ -257,11 +273,12 @@ function startOver() {
         <input v-model="m.name" :placeholder="`Member ${i + 1} name`" maxlength="40" />
         <input v-model="m.address" :placeholder="`${ADDRESS_PREFIX}:q...`" />
         <template v-if="orderMode === 'manual'">
-          <button type="button" @click="move(i, -1)" :disabled="i === 0" title="Move up">↑</button>
-          <button type="button" @click="move(i, 1)" :disabled="i === members.length - 1" title="Move down">↓</button>
+          <button type="button" class="secondary" @click="move(i, -1)" :disabled="i === 0" title="Move up">↑</button>
+          <button type="button" class="secondary" @click="move(i, 1)" :disabled="i === members.length - 1" title="Move down">↓</button>
         </template>
         <button
           type="button"
+          class="secondary"
           @click="removeMember(i)"
           :disabled="members.length <= MIN_MEMBERS"
           title="Remove"
@@ -269,28 +286,28 @@ function startOver() {
       </div>
 
       <div class="row">
-        <button type="button" @click="addMember" :disabled="members.length >= MAX_MEMBERS">+ Add member</button>
+        <button type="button" class="secondary" @click="addMember" :disabled="members.length >= MAX_MEMBERS">+ Add member</button>
       </div>
 
-      <p v-if="summary"><small>{{ summary }}</small></p>
+      <p v-if="summary" class="muted">{{ summary }}</p>
 
       <button type="submit" :disabled="creating">
         {{ creating ? 'Reading the blockchain...' : 'Create circle' }}
       </button>
-      <ul style="color: #b00">
+      <ul role="alert">
         <li v-for="e in errors" :key="e">{{ e }}</li>
       </ul>
     </form>
 
     <div v-else>
       <CircleView :key="shareLink" :circle="circle" @demo-copy="makeDemoCopy" />
-      <p v-if="copyError" role="alert" style="color: #dc2626">{{ copyError }}</p>
+      <p v-if="copyError" role="alert">{{ copyError }}</p>
       <p>Share this link with the other members. Everyone opens the same link and connects their own wallet:</p>
       <input :value="shareLink" readonly style="width: 100%" />
-      <p v-if="shareLink.length > 2000">
-        <small>This link is long. If a chat app cuts it off, send it as a file or in two messages.</small>
+      <p v-if="shareLink.length > 2000" class="muted">
+        This link is long. If a chat app cuts it off, send it as a file or in two messages.
       </p>
-      <p><button type="button" @click="startOver">Start a new circle</button></p>
+      <p><button type="button" class="secondary" @click="go('create')">Start a new circle</button></p>
     </div>
   </main>
 </template>
@@ -302,9 +319,8 @@ input, select { padding: 0.5rem; font-size: 1rem; }
 input[type='radio'] { padding: 0; margin-right: 0.4rem; }
 .row { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: end; }
 .member { display: flex; gap: 0.4rem; align-items: center; }
-.member .num { width: 1.5rem; text-align: right; }
+.member .num { width: 1.5rem; text-align: right; color: var(--muted); }
 .member input:nth-of-type(1) { width: 25%; }
 .member input:nth-of-type(2) { flex: 1; }
-button { padding: 0.5rem 0.8rem; font-size: 1rem; cursor: pointer; }
-table { border-collapse: collapse; width: 100%; }
+table { width: 100%; }
 </style>

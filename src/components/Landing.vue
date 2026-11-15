@@ -32,7 +32,7 @@ const faqs = [
   ['What if someone does not pay?', 'Everyone sees it on the page. The app cannot force payment, so the group decides together what to do. That is why you should only join circles with people you know.'],
   ['Can I leave or swap seats?', 'Before the second round starts, members can leave and a new member can take the open seat. Two members who have not received yet can swap seats if both approve with their wallets.'],
   ['What if a member dies?', 'Write your rule in the circle before it starts, for example that a named heir continues the payments. The app records the rule but cannot enforce it. For inheritance questions, ask a scholar or a lawyer.'],
-  ['Which wallet do I need?', 'A wallet that supports WizardConnect. We tested Paytaca. Others such as Cashonize should work too.'],
+      ['Which wallet do I need?', 'Any wallet that supports WizardConnect. We tested Paytaca, and the BLAZE team reports that Cashonize works too.'],
   ['Do I need an account?', 'No. The circle lives inside its link, so there is no account and no database. Payments and changes are public notes on the blockchain.'],
 ]
 </script>

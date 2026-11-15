@@ -10,6 +10,7 @@ import { fetchEvents, resolveEvents } from '../events.js'
 import { windowText, buildCalendar, downloadText } from '../reminders.js'
 import { NETWORK } from '../config.js'
 import EventsPanel from './EventsPanel.vue'
+import AgreementCard from './AgreementCard.vue'
 
 const props = defineProps({
   circle: { type: Object, required: true },
@@ -464,6 +465,7 @@ async function payRound(round) {
       </ol>
     </details>
 
+    <AgreementCard :agreement="circle.agreement" />
     <div v-if="hasDraw" class="draw">
       <h3>Order decided by the blockchain</h3>
 

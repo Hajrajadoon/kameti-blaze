@@ -7,6 +7,17 @@ export const MIN_MEMBERS = 3
 export const MAX_MEMBERS = 20
 export const UNITS = ['days', 'weeks', 'months']
 export const DEFAULT_WINDOW_DAYS = 7
+export const NOTE_MAX = 300
+
+// Ready-made rules for the group agreement. The texts live here, so a link can only carry rule ids.
+export const AGREEMENT_RULES = [
+  { id: 'notify', text: 'A member who cannot pay tells the group before the pay window opens.' },
+  { id: 'heir', text: 'If a member dies, a named heir continues their payments and keeps their seat.' },
+  { id: 'late', text: 'If a payment is late, the group decides together what to do within 7 days.' },
+  { id: 'know', text: 'Only people the group knows and trusts are invited to join.' },
+  { id: 'nosell', text: 'Seats are never sold or traded for money or favours.', locked: true },
+  { id: 'nointerest', text: 'No interest, fees or extra charges: the receiver gets exactly what members paid.', locked: true },
+]
 
 function addDays(iso, days) {
   const d = new Date(iso)
@@ -46,6 +57,7 @@ export function validate({
   drawHeight,
   first,
   payWindow,
+  agreement,
 }) {
   const errors = []
   if (typeof name !== 'string' || !name.trim()) errors.push('Give the circle a name.')
@@ -77,6 +89,20 @@ export function validate({
       errors.push('The payment window cannot be longer than one round.')
     }
   }
+  if (agreement !== undefined) {
+    const ids = agreement && Array.isArray(agreement.rules) ? agreement.rules : null
+    if (!ids || ids.some(id => !AGREEMENT_RULES.some(r => r.id === id))) {
+      errors.push('Invalid group agreement.')
+    } else {
+      for (const r of AGREEMENT_RULES) {
+        if (r.locked && !ids.includes(r.id)) errors.push('The agreement must keep the rules marked as always included.')
+      }
+      const note = agreement.note
+      if (note !== undefined && (typeof note !== 'string' || note.length > NOTE_MAX)) {
+        errors.push(`The group note must be text of at most ${NOTE_MAX} characters.`)
+      }
+    }
+  }
 
   const addressPattern = new RegExp(`^${ADDRESS_PREFIX}:[a-z0-9]{30,}$`, 'i')
   const seen = new Set()
@@ -105,11 +131,17 @@ export function createCircle({
   demo = false,
   first = -1,
   payWindow = DEFAULT_WINDOW_DAYS,
+  agreement = null,
 }) {
   const circle = { name: name.trim(), members, amountSats, startDate, every, unit, payWindow }
   if (drawHeight > 0) circle.drawHeight = drawHeight
   if (demo) circle.demo = true
   if (Number.isInteger(first) && first >= 0) circle.first = first
+  if (agreement) {
+    const note = (agreement.note || '').trim()
+    circle.agreement = { rules: [...agreement.rules].sort() }
+    if (note) circle.agreement.note = note
+  }
   return circle
 }
 
@@ -149,7 +181,7 @@ export const encodeCircle = c => toB64(JSON.stringify(c))
 export const decodeCircle = s => JSON.parse(fromB64(s))
 
 // Short id of a circle. It is written into every payment and it seeds the draw.
-// It does not depend on member order, but any change to the rules changes the id.
+// It does not depend on member order, but any change to the rules or the agreement changes the id.
 export async function circleId(circle) {
   const priority = Number.isInteger(circle.first) ? circle.members[circle.first]?.address : ''
   const data = JSON.stringify({
@@ -161,6 +193,8 @@ export async function circleId(circle) {
     d: circle.drawHeight || 0,
     p: (priority || '').toLowerCase(),
     w: circle.payWindow || DEFAULT_WINDOW_DAYS,
+    g: (circle.agreement?.rules || []).slice().sort().join(','),
+    n: circle.agreement?.note || '',
   })
   const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(data))
   return Array.from(new Uint8Array(hash))

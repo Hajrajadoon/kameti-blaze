@@ -155,44 +155,38 @@ function join() {
 
 <template>
   <section class="changes">
-    <h3>Joining, leaving and swapping seats</h3>
-
-    <p v-if="loading">Reading circle changes from the blockchain...</p>
-    <p v-if="error" role="alert" style="color: #dc2626">{{ error }}</p>
+    <p v-if="loading" class="muted">Reading circle changes from the blockchain...</p>
+    <p v-if="error" role="alert">{{ error }}</p>
 
     <p v-if="ev && isOpen">
-      <strong>Open until {{ lockText }}.</strong> Until then members can leave, and a new member
-      can take a vacated seat (at the last position). A seat still empty after that date is removed,
-      so the circle gets shorter.
-      <span v-if="vacancies > 0"><strong> Open seats: {{ vacancies }}.</strong></span>
+      <strong>Open until {{ lockText }}.</strong> Until then members can leave, and a new member can take a vacated
+      seat (at the last position). A seat still empty after that date is removed, so the circle gets shorter.
+      <span v-if="vacancies > 0" class="warn"><strong> Open seats: {{ vacancies }}.</strong></span>
     </p>
     <p v-else-if="ev">
       <strong>Closed.</strong> The circle has {{ order.length }} members
-      <span v-if="order.length < circle.members.length">
-        (it shrank from {{ circle.members.length }})
-      </span>
-      and runs to the end. Nobody can leave or join. Seat swaps are still possible before either
-      round starts.
+      <span v-if="order.length < circle.members.length">(it shrank from {{ circle.members.length }})</span>
+      and runs to the end. Nobody can leave or join. Seat swaps are still possible before either round starts.
     </p>
 
-    <p v-if="ev && ev.hasTentative" style="color: #b45309">
+    <p v-if="ev && ev.hasTentative" class="warn">
       <small>
-        Some changes are not in a block yet. They are shown as applied and become final after the
-        next block. This page re-checks by itself every 30 seconds.
+        Some changes are not in a block yet. They are shown as applied and become final after the next block. This
+        page re-checks by itself every 30 seconds.
       </small>
     </p>
 
     <div v-if="wallet.ready && meActive">
-      <div v-if="isOpen">
-        <button :disabled="blocked || moneyMoved" @click="leave">Leave this circle</button>
-        <small v-if="moneyMoved">
+      <div v-if="isOpen" class="btns">
+        <button class="secondary" :disabled="blocked || moneyMoved" @click="leave">Leave this circle</button>
+        <small v-if="moneyMoved" class="muted">
           You already paid or received in this circle, so you cannot leave it.
         </small>
       </div>
 
-      <p>
+      <div class="swap">
         <label>
-          Swap seats with:
+          Swap seats with
           <select v-model.number="swapWith">
             <option :value="0">Choose a member...</option>
             <option v-for="n in others" :key="n" :value="n">{{ nameOf(n) }}</option>
@@ -201,11 +195,10 @@ function join() {
         <button :disabled="blocked || alreadyAgreed" @click="proposeSwap">
           {{ alreadyAgreed ? 'Waiting for them to agree' : 'Agree to swap' }}
         </button>
-        <br />
-        <small>
-          Both members must agree. Click once and wait. Agree to swap only with someone you have
-          talked to, and never pay for a seat. Do not pay a round before its window opens.
-        </small>
+      </div>
+      <p class="muted">
+        Both members must agree. Click once and wait. Agree to swap only with someone you have talked to, and never
+        pay for a seat. Do not pay a round before its window opens.
       </p>
 
       <ul v-if="incoming.length">
@@ -221,7 +214,7 @@ function join() {
       </ul>
     </div>
 
-    <div v-if="canJoin">
+    <div v-if="canJoin" class="join">
       <p>You are not in this circle, and there is an open seat. You would take the last position.</p>
       <label>
         Your name
@@ -229,24 +222,35 @@ function join() {
       </label>
       <button :disabled="blocked" @click="join">Join this circle</button>
     </div>
-    <p v-else-if="wallet.ready && meNo === 0 && ev"><small>There is no open seat for you right now.</small></p>
+    <p v-else-if="wallet.ready && meNo === 0 && ev" class="muted">There is no open seat for you right now.</p>
 
-    <p v-if="!wallet.ready"><small>Connect your wallet above to join, leave or swap.</small></p>
+    <p v-if="!wallet.ready" class="muted">Connect your wallet above to join, leave or swap.</p>
 
     <p v-if="busy">{{ status || 'Waiting for your wallet...' }}</p>
-    <p v-if="problem" role="alert" style="color: #dc2626">{{ problem }}</p>
-    <p v-if="message" style="color: #15803d">{{ message }}</p>
+    <p v-if="problem" role="alert">{{ problem }}</p>
+    <p v-if="message" class="okmsg">{{ message }}</p>
 
     <h4>Changes so far</h4>
-    <p v-if="!ev || !ev.log.length"><small>No changes have been posted yet.</small></p>
+    <p v-if="!ev || !ev.log.length" class="muted">No changes have been posted yet.</p>
     <ul v-else>
       <li v-for="item in ev.log" :key="item.txid + item.kind">
         <strong>{{ item.kind }}:</strong> {{ item.text }}
-        <small>({{ statusWord(item) }})</small>
+        <small class="muted">({{ statusWord(item) }})</small>
       </li>
     </ul>
     <p>
-      <button :disabled="loading" @click="emit('refresh')">Refresh changes</button>
+      <button class="secondary" :disabled="loading" @click="emit('refresh')">Refresh changes</button>
     </p>
   </section>
 </template>
+
+<style scoped>
+.changes { margin-top: 0.5rem; }
+.btns { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin: 0.5rem 0; }
+.swap { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: flex-end; margin: 0.75rem 0 0.25rem; }
+.swap label { display: grid; gap: 0.25rem; flex: 1; min-width: 12rem; }
+select, input { padding: 0.5rem; font-size: 1rem; }
+.join { display: grid; gap: 0.5rem; max-width: 24rem; }
+.warn { color: var(--gold); }
+.okmsg { color: var(--mint); }
+</style>

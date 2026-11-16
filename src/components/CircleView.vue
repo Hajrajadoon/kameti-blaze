@@ -208,6 +208,8 @@ const unpaidNames = roundIdx =>
 function paidCount(roundIdx) {
   return Object.keys(paid.value[roundIdx] || {}).length
 }
+const percent = roundIdx =>
+  Math.round((paidCount(roundIdx) / Math.max(1, rounds.value.length - 1)) * 100)
 
 const myPayments = computed(() => {
   if (!orderReady.value || !viewActive.value) return []
@@ -397,28 +399,43 @@ async function payRound(round) {
 
 <template>
   <section class="circle">
-    <h2>{{ circle.name }}</h2>
+    <header class="head">
+      <div>
+        <h2>{{ circle.name }}</h2>
+        <p class="muted">
+          {{ rounds.length }} members · {{ rounds.length }} rounds · every {{ circle.every }}
+          {{ circle.unit }} · {{ formatBch(circle.amountSats) }} BCH each
+        </p>
+      </div>
+      <div class="chips">
+        <span class="chip">{{ NETWORK }}</span>
+        <span v-if="circle.demo" class="chip gold">demo draw</span>
+        <span v-else-if="hasDraw" class="chip">blockchain draw</span>
+        <span v-else class="chip">set by hand</span>
+        <span v-if="hasPriority" class="chip gold">priority seat: {{ circle.members[circle.first].name }}</span>
+      </div>
+    </header>
 
+    <!-- who is looking at this page -->
     <div class="identity" :class="idClass">
       <p v-if="wallet.ready && meIdx >= 0 && isActive">
-        ✅ <strong>Connected as {{ meName }}.</strong>
-        You pay the other members in their rounds<span v-if="myReceiveRound">,
-        and you receive in round {{ myReceiveRound }}</span>.
+        <strong>Connected as {{ meName }}.</strong>
+        You pay the other members in their rounds<span v-if="myReceiveRound"
+          >, and you receive in round {{ myReceiveRound }}</span
+        >.
       </p>
       <p v-else-if="wallet.ready && meIdx >= 0">
         <strong>Connected as {{ meName }}</strong>, who is no longer an active member of this circle.
       </p>
       <p v-else-if="wallet.ready">
-        ⚠ <strong>This wallet is not a member of this circle.</strong>
-        You can join if a seat is open.
+        <strong>This wallet is not a member of this circle.</strong> You can join if a seat is open.
       </p>
       <p v-else>
-        <strong>No wallet connected.</strong> You are only viewing this circle.
-        Connect your wallet above to pay.
+        <strong>No wallet connected.</strong> You are only viewing this circle. Connect your wallet above to pay.
       </p>
 
-      <label v-if="meIdx < 0">
-        Preview as (view only, no payments):
+      <label v-if="meIdx < 0" class="preview">
+        Preview as (view only, no payments)
         <select v-model.number="previewIdx">
           <option :value="-1">Choose a member...</option>
           <option v-for="(m, i) in effCircle.members" :key="i" :value="i">
@@ -428,274 +445,295 @@ async function payRound(round) {
       </label>
     </div>
 
-    <p>
-      {{ rounds.length }} members, {{ rounds.length }} rounds, one round every
-      {{ circle.every }} {{ circle.unit }}. Each member pays
-      <strong>{{ formatBch(circle.amountSats) }} BCH</strong> per round ({{ NETWORK }}).
-      Everyone pays inside the first <strong>{{ windowDays }} days</strong> of each round, so the
-      receiver gets the whole amount at once. Every payment goes straight to the receiver.
-      Nobody holds the pool. Dates are in UTC.
+    <p class="muted">
+      Everyone pays inside the first <strong>{{ windowDays }} days</strong> of each round, so the receiver gets
+      the whole amount at once. Every payment goes straight to the receiver. Nobody holds the pool. Dates are in UTC.
     </p>
 
-    <p>
-      <small>
-        Order mode:
-        <strong v-if="circle.demo">instant demo draw</strong>
-        <strong v-else-if="hasDraw">blockchain draw at block {{ circle.drawHeight }}</strong>
-        <strong v-else>set by hand</strong>
-        <span v-if="hasPriority">
-          , priority seat (first turn): <strong>{{ circle.members[circle.first].name }}</strong>
-        </span>
-      </small>
-    </p>
+    <AgreementCard :agreement="circle.agreement" />
 
-    <details class="verify" open>
-      <summary><strong>Check before you pay</strong> (circle id {{ circleIdText }})</summary>
-      <p>
-        <small>
-          Every member must see the <strong>same circle id</strong> and the same addresses below.
-          If your id differs from the group's, do not pay. Someone may have changed the link.
-          These are the members when the circle was created. Later changes are listed further down.
-        </small>
+    <details class="verify">
+      <summary>Check before you pay · circle id <code>{{ circleIdText }}</code></summary>
+      <p class="muted">
+        Every member must see the same circle id and the same addresses. If your id differs from the group's,
+        do not pay: someone may have changed the link. These are the members when the circle was created.
       </p>
       <ol>
-        <li v-for="(m, i) in circle.members" :key="i" style="overflow-wrap: anywhere">
+        <li v-for="(m, i) in circle.members" :key="i" class="addr">
           {{ m.name }}: <code>{{ m.address }}</code>
         </li>
       </ol>
     </details>
 
-    <AgreementCard :agreement="circle.agreement" />
-    <div v-if="hasDraw" class="draw">
-      <h3>Order decided by the blockchain</h3>
+    <!-- the draw -->
+    <div v-if="hasDraw" class="box">
+      <h3>Who receives when</h3>
 
-      <p v-if="circle.demo" style="color: #b45309">
-        <strong>Demo circle:</strong> the draw used a block that already existed, so an organizer
-        could choose the moment to get a favourable order. Use the normal draw for real circles.
+      <p v-if="circle.demo" class="warn">
+        <strong>Demo circle:</strong> the draw used a block that already existed, so an organizer could choose the
+        moment to get a favourable order. Use the normal draw for real circles.
       </p>
 
-      <p v-if="hasPriority">
-        <strong>{{ circle.members[circle.first].name }}</strong> holds the priority seat and
-        receives in round 1. The group agreed this before the draw. The draw decides everyone else.
-        The first receiver carries the most trust, so only agree to it if you know and trust them.
+      <p v-if="hasPriority" class="muted">
+        <strong>{{ circle.members[circle.first].name }}</strong> holds the priority seat and receives in round 1.
+        The group agreed this before the draw, and the draw decides everyone else. The first receiver carries the
+        most trust.
       </p>
 
       <p v-if="drawStatus === 'loading'">Reading the blockchain...</p>
 
       <div v-else-if="drawStatus === 'pending'">
         <p>
-          The payout order is decided by block <strong>{{ circle.drawHeight }}</strong>
-          of the {{ NETWORK }} blockchain. Nobody can predict or control it.
-          Current block: {{ currentHeight }}. The draw runs in about
-          <strong>{{ remainingBlocks }}</strong> more blocks
-          (roughly {{ remainingBlocks * 10 }} minutes).
+          The order is decided by block <strong>{{ circle.drawHeight }}</strong> of the {{ NETWORK }} blockchain.
+          Nobody can predict or control it. Current block: {{ currentHeight }}. The draw runs in about
+          <strong>{{ remainingBlocks }}</strong> more blocks (roughly {{ remainingBlocks * 10 }} minutes).
         </p>
-        <p>
-          <strong>All members must open this link and check the list above before the draw.</strong>
-          If the list changes later, the order changes too, and everyone can see it.
+        <p class="muted">
+          All members should open this link and check the list above before the draw. If the list changes later, the
+          order changes too, and everyone can see it.
         </p>
-        <p>
-          <button @click="loadDraw">Check again</button>
-          <button v-if="!circle.demo" @click="$emit('demo-copy')">
+        <p class="btns">
+          <button class="secondary" @click="loadDraw">Check again</button>
+          <button v-if="!circle.demo" class="secondary" @click="$emit('demo-copy')">
             Skip the wait: make an instant demo copy (demo only)
           </button>
         </p>
       </div>
 
       <div v-else-if="drawStatus === 'ready'">
-        <p>
-          Draw done with block {{ circle.drawHeight }}.
-          Block hash: <code style="overflow-wrap: anywhere">{{ blockHash }}</code>
-        </p>
-        <ol style="list-style: none; padding-left: 0">
+        <ol class="order">
           <li v-for="(idx, i) in seq" :key="idx">
-            <span v-if="hasPriority && i === 0">Priority seat:</span>
-            <span v-else>Roll {{ hasPriority ? i : i + 1 }}:</span>
-            <strong> {{ circle.members[idx].name }}</strong> receives in round {{ i + 1 }}
-            (before any later changes)
+            <span class="num">{{ i + 1 }}</span>
+            <strong>{{ circle.members[idx].name }}</strong>
+            <span v-if="hasPriority && i === 0" class="chip gold">priority seat</span>
+            <span v-else class="chip">draw</span>
+            <span class="muted">receives in round {{ i + 1 }}</span>
           </li>
         </ol>
-        <p>
-          <small>
-            Anyone can repeat this draw from the block hash and the circle id
-            ({{ circleIdText }}) and will get the same order.
-          </small>
-        </p>
+        <details>
+          <summary>Verify the draw yourself</summary>
+          <p class="muted">
+            Draw done with block {{ circle.drawHeight }}. Block hash:
+            <code class="addr">{{ blockHash }}</code>. Anyone can repeat the draw from the block hash and the circle
+            id ({{ circleIdText }}) and will get the same order. Later seat swaps are listed under "Seat changes".
+          </p>
+        </details>
       </div>
 
       <div v-else-if="drawStatus === 'error'">
-        <p role="alert" style="color: #dc2626">Could not run the draw: {{ drawError }}</p>
-        <p><button @click="loadDraw">Try again</button></p>
+        <p role="alert">Could not run the draw: {{ drawError }}</p>
+        <p><button class="secondary" @click="loadDraw">Try again</button></p>
       </div>
     </div>
 
-    <EventsPanel
-      v-if="orderReady"
-      :circle="circle"
-      :circle-id="circleIdText"
-      :ev="ev"
-      :me-no="isActive ? meIdx + 1 : 0"
-      :money-moved="myMoneyMoved"
-      :loading="evLoading"
-      :error="evError"
-      @refresh="refreshAll"
-    />
-
     <template v-if="orderReady">
-      <div v-if="viewActive" class="owe">
+      <!-- what the viewed member owes -->
+      <div v-if="viewActive" class="box">
         <h3>What {{ viewName }} owes</h3>
 
-        <p v-if="nextPayment" :style="{ color: nextPayment.status === 'late' ? '#dc2626' : 'inherit' }">
-          <strong>Next payment:</strong> round {{ nextPayment.round }}, {{ viewName }} pays
-          <strong>{{ nextPayment.recipient.name }}</strong>
-          {{ formatBch(nextPayment.amountSats) }} BCH between
-          {{ nextPayment.periodStart.slice(0, 10) }} and {{ nextPayment.dueDate.slice(0, 10) }}.
-          <span v-if="nextPayment.status === 'late'">⚠ This payment is late.</span>
-          <span v-else>({{ windowText(nextPayment.periodStart, nextPayment.dueDate) }})</span>
-        </p>
+        <div v-if="nextPayment" class="next" :class="{ late: nextPayment.status === 'late' }">
+          <p class="muted">Next payment · round {{ nextPayment.round }}</p>
+          <p class="big">
+            {{ viewName }} pays {{ nextPayment.recipient.name }} {{ formatBch(nextPayment.amountSats) }} BCH
+          </p>
+          <p>
+            Between {{ nextPayment.periodStart.slice(0, 10) }} and {{ nextPayment.dueDate.slice(0, 10) }}.
+            <span v-if="nextPayment.status === 'late'" class="chip bad">late</span>
+            <span v-else class="chip">{{ windowText(nextPayment.periodStart, nextPayment.dueDate) }}</span>
+          </p>
+        </div>
         <p v-else>✅ All of {{ viewName }}'s payments are done.</p>
 
-        <ul>
+        <ul class="owelist">
           <li v-for="r in myPayments" :key="r.round">
-            Round {{ r.round }}: {{ viewName }} pays <strong>{{ r.recipient.name }}</strong>
-            {{ formatBch(r.amountSats) }} BCH between {{ r.periodStart.slice(0, 10) }}
-            and {{ r.dueDate.slice(0, 10) }}
-            <span v-if="r.status === 'paid'"> ✅ paid</span>
-            <span v-else-if="r.status === 'late'" style="color: #dc2626"> ⚠ late</span>
+            Round {{ r.round }}: pay <strong>{{ r.recipient.name }}</strong> {{ formatBch(r.amountSats) }} BCH,
+            {{ r.periodStart.slice(0, 10) }} to {{ r.dueDate.slice(0, 10) }}
+            <span v-if="r.status === 'paid'" class="chip ok">paid</span>
+            <span v-else-if="r.status === 'late'" class="chip bad">late</span>
           </li>
         </ul>
 
-        <p>
-          <button :disabled="!duePayments.length" @click="addToCalendar">
+        <p class="btns">
+          <button class="secondary" :disabled="!duePayments.length" @click="addToCalendar">
             Add my payment dates to my calendar
           </button>
-          <button v-if="wallet.ready && meIdx >= 0" :disabled="balanceBusy" @click="checkMyBalance">
+          <button v-if="wallet.ready && meIdx >= 0" class="secondary" :disabled="balanceBusy" @click="checkMyBalance">
             {{ balanceBusy ? 'Checking...' : 'Check my wallet balance' }}
           </button>
         </p>
-        <p v-if="balanceError" role="alert" style="color: #dc2626">{{ balanceError }}</p>
+        <p v-if="balanceError" role="alert">{{ balanceError }}</p>
         <p v-if="balanceInfo">
-          Your wallet has <strong>{{ formatBch(balanceInfo.have) }} BCH</strong>. Your unpaid payments
-          need about <strong>{{ formatBch(balanceInfo.need) }} BCH</strong> including fees.
-          <span v-if="balanceInfo.have >= balanceInfo.need" style="color: #15803d">Your balance is enough. ✅</span>
-          <span v-else style="color: #dc2626">
-            Please add about {{ formatBch(balanceInfo.need - balanceInfo.have) }} BCH to your wallet
-            before the payment dates.
+          Your wallet has <strong>{{ formatBch(balanceInfo.have) }} BCH</strong>. Your unpaid payments need about
+          <strong>{{ formatBch(balanceInfo.need) }} BCH</strong> including fees.
+          <span v-if="balanceInfo.have >= balanceInfo.need" class="okmsg">Your balance is enough.</span>
+          <span v-else class="warn">
+            Please add about {{ formatBch(balanceInfo.need - balanceInfo.have) }} BCH to your wallet before the
+            payment dates.
           </span>
         </p>
-        <p>
-          <small>
-            Payments are never taken automatically. You approve each one in your own wallet.
-          </small>
-        </p>
+        <p class="muted">Payments are never taken automatically. You approve each one in your own wallet.</p>
       </div>
 
+      <!-- the rounds -->
       <h3>Rounds</h3>
-      <div style="overflow-x: auto">
-        <table border="1" cellpadding="6">
-          <thead>
-            <tr>
-              <th>Round</th>
-              <th>Receives the money</th>
-              <th>Pay window</th>
-              <th>Paid by</th>
-              <th>Still to pay</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(r, i) in rounds" :key="r.round">
-              <td>{{ r.round }}<small v-if="i === currentRoundIndex"> (current)</small></td>
-              <td><strong>{{ r.recipient.name }}</strong></td>
-              <td>{{ r.periodStart.slice(0, 10) }} to {{ r.dueDate.slice(0, 10) }}</td>
-              <td>
-                <span v-if="paidNames(i).length">✅ {{ paidNames(i).join(', ') }}
-                  <small>({{ formatBch(paidCount(i) * r.amountSats) }} BCH received)</small></span>
-                <span v-else>nobody yet</span>
-              </td>
-              <td>
-                <span v-if="unpaidNames(i).length">{{ unpaidNames(i).join(', ') }}</span>
-                <span v-else>✅ everyone has paid</span>
-              </td>
-              <td>
-                <span v-if="viewActive && r.recipientNo === viewIdx + 1">
-                  {{ viewName }} (you) receive this round
-                </span>
-                <span v-else-if="viewActive && statusFor(i, viewIdx + 1) === 'paid'">
-                  ✅ {{ viewName }} (you) paid {{ r.recipient.name }}
-                </span>
-                <button v-else :disabled="!canPay || !windowOpen(r)" @click="payRound(r)">
-                  {{
-                    busyRound === r.round
-                      ? 'Waiting for wallet...'
-                      : windowOpen(r)
-                        ? 'Pay ' + r.recipient.name + ' (' + formatBch(r.amountSats) + ' BCH)'
-                        : 'Opens ' + r.periodStart.slice(0, 10)
-                  }}
-                </button>
-                <button v-if="busyRound === r.round" @click="cancel">Cancel</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <div class="rounds">
+        <article v-for="(r, i) in rounds" :key="r.round" class="round" :class="{ now: i === currentRoundIndex }">
+          <div class="rtop">
+            <strong>Round {{ r.round }}</strong>
+            <span v-if="i === currentRoundIndex" class="chip ok">current</span>
+            <span v-else-if="!windowOpen(r)" class="chip">opens {{ r.periodStart.slice(0, 10) }}</span>
+          </div>
+          <p class="who"><span class="muted">Receives</span> <strong>{{ r.recipient.name }}</strong></p>
+          <p class="muted">Pay window: {{ r.periodStart.slice(0, 10) }} to {{ r.dueDate.slice(0, 10) }}</p>
+
+          <div
+            class="bar"
+            role="progressbar"
+            aria-label="Payments received this round"
+            aria-valuemin="0"
+            :aria-valuemax="rounds.length - 1"
+            :aria-valuenow="paidCount(i)"
+          >
+            <span :style="{ width: percent(i) + '%' }"></span>
+          </div>
+          <p class="muted">
+            {{ paidCount(i) }} of {{ rounds.length - 1 }} paid ({{ formatBch(paidCount(i) * r.amountSats) }} BCH received)
+          </p>
+
+          <p class="who2">
+            <span v-for="n in paidNames(i)" :key="'p' + n" class="chip ok">{{ n }} paid</span>
+            <span
+              v-for="n in unpaidNames(i)"
+              :key="'u' + n"
+              class="chip"
+              :class="isLate(r.dueDate) ? 'bad' : 'gold'"
+            >{{ n }} {{ isLate(r.dueDate) ? 'is late' : 'to pay' }}</span>
+          </p>
+
+          <div class="act">
+            <p v-if="viewActive && r.recipientNo === viewIdx + 1" class="okmsg">
+              {{ viewName }} (you) receive this round
+            </p>
+            <p v-else-if="viewActive && statusFor(i, viewIdx + 1) === 'paid'" class="okmsg">
+              {{ viewName }} (you) paid {{ r.recipient.name }}
+            </p>
+            <template v-else>
+              <button :disabled="!canPay || !windowOpen(r)" @click="payRound(r)">
+                {{
+                  busyRound === r.round
+                    ? 'Waiting for wallet...'
+                    : windowOpen(r)
+                      ? 'Pay ' + r.recipient.name + ' (' + formatBch(r.amountSats) + ' BCH)'
+                      : 'Opens ' + r.periodStart.slice(0, 10)
+                }}
+              </button>
+              <button v-if="busyRound === r.round" class="secondary" @click="cancel">Cancel</button>
+            </template>
+          </div>
+        </article>
       </div>
 
-      <h3>Who has paid</h3>
-      <p>
-        <button :disabled="tracking" @click="refreshStatus">
+      <p class="btns">
+        <button class="secondary" :disabled="tracking" @click="refreshStatus">
           {{ tracking ? 'Reading the blockchain...' : 'Refresh payment status' }}
         </button>
-        <small v-if="lastTracked"> Last checked: {{ lastTracked }}</small>
+        <span v-if="lastTracked" class="muted">Last checked: {{ lastTracked }}</span>
       </p>
-      <p v-if="trackError" role="alert" style="color: #dc2626">{{ trackError }}</p>
+      <p v-if="trackError" role="alert">{{ trackError }}</p>
 
-      <div style="overflow-x: auto">
-        <table border="1" cellpadding="6">
-          <thead>
-            <tr>
-              <th>Round (receiver)</th>
-              <th v-for="r in rounds" :key="r.round">{{ r.recipient.name }} pays</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(r, i) in rounds" :key="r.round">
-              <td>{{ r.round }} ({{ r.recipient.name }} receives)</td>
-              <td v-for="(c, j) in rounds" :key="c.round" style="text-align: center">
-                <span v-if="cellStatus(i, j) === 'self'" title="Receiver">—</span>
-                <span v-else-if="cellStatus(i, j) === 'paid'" :title="paid[i][c.recipientNo].txid">✅</span>
-                <span v-else-if="cellStatus(i, j) === 'late'" style="color: #dc2626">⚠ Late</span>
-                <span v-else>⏳</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <p>
-        <small>
-          How to read it: each row is one round, and the name in brackets receives the money.
-          Under every other name, ✅ means that person has paid, ⏳ means not yet due, ⚠ means late,
-          and — means that person is the receiver. A payment counts when the blockchain shows it
-          reached the receiver with this circle's note and at least the agreed amount.
-        </small>
-      </p>
+      <details>
+        <summary>Full payment grid</summary>
+        <div class="scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Round (receiver)</th>
+                <th v-for="r in rounds" :key="r.round">{{ r.recipient.name }} pays</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(r, i) in rounds" :key="r.round">
+                <td>{{ r.round }} ({{ r.recipient.name }} receives)</td>
+                <td v-for="(c, j) in rounds" :key="c.round" class="cell">
+                  <span v-if="cellStatus(i, j) === 'self'" title="Receiver">—</span>
+                  <span v-else-if="cellStatus(i, j) === 'paid'" class="okmsg" :title="paid[i][c.recipientNo].txid">paid</span>
+                  <span v-else-if="cellStatus(i, j) === 'late'" class="late-text">late</span>
+                  <span v-else class="muted">not yet</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="muted">
+          Each row is one round, and the name in brackets receives the money. A payment counts when the blockchain
+          shows it reached the receiver with this circle's note and at least the agreed amount.
+        </p>
+      </details>
+
+      <details>
+        <summary>Seat changes: leave, swap or join</summary>
+        <EventsPanel
+          :circle="circle"
+          :circle-id="circleIdText"
+          :ev="ev"
+          :me-no="isActive ? meIdx + 1 : 0"
+          :money-moved="myMoneyMoved"
+          :loading="evLoading"
+          :error="evError"
+          @refresh="refreshAll"
+        />
+      </details>
     </template>
 
-    <p v-if="errorText" role="alert" style="color: #dc2626">{{ errorText }}</p>
-    <p v-if="lastTx" style="overflow-wrap: anywhere">
-      ✅ {{ lastPaidText }}. Transaction: <code>{{ lastTx }}</code>
+    <p v-if="errorText" role="alert">{{ errorText }}</p>
+    <p v-if="lastTx" class="okmsg addr">
+      {{ lastPaidText }}. Transaction: <code>{{ lastTx }}</code>
     </p>
   </section>
 </template>
 
 <style scoped>
-.identity {
-  border-radius: 6px;
-  padding: 0.5rem 0.75rem;
-  margin: 0.5rem 0 1rem;
-  border: 1px solid;
-}
-.identity p { margin: 0.25rem 0; }
-.id-ok { background: #ecfdf5; border-color: #6ee7b7; color: #065f46; }
-.id-warn { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
-.id-off { background: #f3f4f6; border-color: #d1d5db; color: #374151; }
+.head { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; align-items: flex-start; margin-bottom: 0.75rem; }
+.head h2 { font-size: 1.6rem; }
+.chips { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.chip { font-size: 0.8rem; padding: 0.15rem 0.6rem; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); display: inline-block; }
+.chip.ok { background: #234036; color: #7CE8B8; border-color: #234036; }
+.chip.gold { background: var(--gold); color: #1A1305; border-color: var(--gold); }
+.chip.bad { background: #4A1F1C; color: #FFB4AB; border-color: #6B2A26; }
+.identity { border-radius: 12px; padding: 0.7rem 1rem; margin: 0.5rem 0 1rem; border: 1px solid; }
+.identity p { margin: 0.2rem 0; }
+.id-ok { background: #123324; border-color: #1F6B49; }
+.id-warn { background: #2A2410; border-color: #6B5A1E; }
+.id-off { background: var(--card); border-color: var(--line); }
+.preview { display: grid; gap: 0.25rem; margin-top: 0.5rem; }
+.preview select { padding: 0.45rem; }
+.box { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 1rem; margin: 1rem 0; }
+.warn { color: var(--gold); }
+.okmsg { color: var(--mint); }
+.addr { overflow-wrap: anywhere; }
+.btns { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; }
+.order { list-style: none; padding: 0; margin: 0 0 0.5rem; display: grid; gap: 0.4rem; }
+.order li { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+.num { width: 1.6rem; height: 1.6rem; border-radius: 50%; background: var(--card-2); display: inline-flex; align-items: center; justify-content: center; color: var(--muted); font-size: 0.85rem; }
+.next { background: var(--card-2); border: 1px solid var(--line); border-left: 4px solid var(--mint); border-radius: 10px; padding: 0.7rem 1rem; margin-bottom: 0.75rem; }
+.next.late { border-left-color: var(--danger); }
+.next p { margin: 0.2rem 0; }
+.big { font-size: 1.25rem; font-weight: 700; }
+.owelist { padding-left: 1.1rem; }
+.rounds { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0.9rem; margin-bottom: 1rem; }
+.round { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 0.9rem; }
+.round.now { border-color: var(--mint); }
+.round p { margin: 0.3rem 0; }
+.rtop { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
+.who { font-size: 1.05rem; }
+.who2 { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.bar { height: 8px; background: #0B1110; border-radius: 999px; overflow: hidden; margin-top: 0.5rem; }
+.bar span { display: block; height: 100%; background: var(--mint); }
+.act { margin-top: 0.6rem; display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.act button { max-width: 100%; }
+.scroll { overflow-x: auto; }
+.scroll table { width: 100%; }
+th, td { padding: 0.5rem 0.7rem; }
+.cell { text-align: center; }
+.late-text { color: var(--danger); }
 </style>

@@ -10,6 +10,9 @@ import { deriveAddress, scanWallet, formatBch } from '../chain.js'
 import { wallet } from '../store.js'
 import TestPayment from './TestPayment.vue'
 
+// The test payment form sends real money, so it only exists on your own computer
+const isDev = import.meta.env.DEV
+
 const {
   state,
   manager,
@@ -21,7 +24,7 @@ const {
   error,
 } = useWizardConnect({
   dappName: 'Kameti.cash',
-  dappIcon: `${window.location.origin}/favicon.ico`,
+  dappIcon: `${window.location.origin}/favicon.svg`,
 })
 
 const walletReady = ref(false)
@@ -179,104 +182,58 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="wallet">
-    <p>
-      Network:
-      <strong>{{ NETWORK }}</strong>
-    </p>
-
     <div v-if="walletReady">
-      <p>
-        ✅ Connected
-        <strong v-if="walletName">: {{ walletName }}</strong>
+      <p class="line">
+        <span class="chip ok">Wallet connected</span>
+        <strong v-if="walletName">{{ walletName }}</strong>
+        <span class="muted">on {{ NETWORK }}</span>
       </p>
-
-      <p v-if="walletAddress" style="overflow-wrap: anywhere">
-        Receive address #0:
+      <p v-if="walletAddress" class="addr">
+        <span class="muted">Your wallet's first address (used to recognise you):</span><br />
         <code>{{ walletAddress }}</code>
       </p>
+      <p v-if="addressError" role="alert">{{ addressError }}</p>
 
-      <p v-if="addressError" style="color: #dc2626">
-        {{ addressError }}
-      </p>
+      <div class="btns">
+        <button class="secondary" :disabled="scanning || !walletAddress" @click="checkBalance">
+          {{ scanning ? 'Checking balance...' : 'Check balance' }}
+        </button>
+        <button class="secondary" @click="handleDisconnect">Disconnect</button>
+      </div>
+      <p v-if="scanError" role="alert">{{ scanError }}</p>
 
-      <button @click="checkBalance" :disabled="scanning || !walletAddress">
-        {{ scanning ? 'Checking balance...' : 'Refresh balance' }}
-      </button>
-
-      <p v-if="scanError" role="alert" style="color: #dc2626">
-        {{ scanError }}
-      </p>
-
-      <section v-if="totalSats !== null" class="balance" aria-live="polite">
-        <h3>Wallet balance</h3>
-
-        <p>
-          <strong style="font-size: 1.5rem">{{ formatBch(totalSats) }} BCH</strong>
+      <details v-if="totalSats !== null" open>
+        <summary>Wallet balance: {{ formatBch(totalSats) }} BCH</summary>
+        <p class="muted">
+          {{ coins.length }} coins found in {{ scannedAddressCount }} addresses. Last checked {{ lastChecked }}.
+          The balance covers the scanned receive and change addresses only, and not CashToken outputs.
         </p>
-
-        <p>Unspent ordinary BCH outputs: {{ coins.length }}</p>
-        <p>Addresses scanned: {{ scannedAddressCount }}</p>
-
-        <p v-if="lastChecked">Last checked: {{ lastChecked }}</p>
-
-        <p>
-          <small>
-            Balance covers the scanned receive/change addresses only.
-            It may not include funds on addresses outside the scan range
-            or CashToken outputs.
-          </small>
-        </p>
-
-        <details v-if="coins.length">
-          <summary>View unspent outputs</summary>
-
-          <ul>
-            <li
-              v-for="coin in coins"
-              :key="coin.txid + ':' + coin.vout"
-              style="overflow-wrap: anywhere; margin-bottom: 12px"
-            >
-              <div>{{ coin.path }} address #{{ coin.index }}</div>
-              <div>{{ formatBch(coin.satoshis) }} BCH</div>
-              <small>{{ coin.txid }}:{{ coin.vout }}</small>
-            </li>
-          </ul>
-        </details>
-
-        <p v-else>No ordinary BCH outputs were found in the scanned addresses.</p>
-      </section>
+        <ul v-if="coins.length" class="coins">
+          <li v-for="coin in coins" :key="coin.txid + ':' + coin.vout">
+            {{ coin.path }} address #{{ coin.index }}: {{ formatBch(coin.satoshis) }} BCH
+          </li>
+        </ul>
+      </details>
 
       <TestPayment
-        v-if="totalSats !== null && coins.length"
+        v-if="isDev && totalSats !== null && coins.length"
         :manager="manager"
         :coins="coins"
         @sent="checkBalance"
       />
 
-      <p>
-        <small>
-          If your wallet does not respond to a request, check that your phone's
-          date and time are set to automatic.
-        </small>
+      <p class="muted">
+        If your wallet does not respond to a request, check that your phone's date and time are set to automatic.
       </p>
-
-      <button @click="handleDisconnect">Disconnect</button>
     </div>
 
     <div v-else>
-      <p v-if="state === 'reconnecting'">
-        Reconnecting to your wallet... Keep the wallet app open.
-      </p>
-
-      <button v-else @click="connect()" :disabled="state === 'connecting'">
+      <button v-if="state !== 'reconnecting'" :disabled="state === 'connecting'" @click="connect()">
         {{ state === 'connecting' ? 'Connecting...' : 'Connect Wallet' }}
       </button>
-
-      <p v-if="state === 'connecting'">Waiting for your wallet to connect...</p>
-
-      <p v-if="error" role="alert" style="color: #dc2626">
-        {{ error }}
-      </p>
+      <p v-else>Reconnecting to your wallet... Keep the wallet app open.</p>
+      <p v-if="state === 'connecting'" class="muted">Waiting for your wallet to connect...</p>
+      <p v-if="error" role="alert">{{ error }}</p>
     </div>
 
     <WizardConnectQRDialog
@@ -287,3 +244,12 @@ onBeforeUnmount(() => {
     />
   </div>
 </template>
+
+<style scoped>
+.line { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin: 0 0 0.4rem; }
+.chip { font-size: 0.8rem; padding: 0.15rem 0.6rem; border-radius: 999px; }
+.chip.ok { background: #234036; color: #7CE8B8; }
+.addr { overflow-wrap: anywhere; margin: 0.4rem 0; }
+.btns { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 0.6rem 0; }
+.coins { margin: 0.3rem 0; padding-left: 1.1rem; font-size: 0.9rem; }
+</style>

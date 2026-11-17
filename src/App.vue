@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { validate, createCircle, encodeCircle, decodeCircle } from './circle.js'
 import { getHeight } from './draw.js'
 import { NETWORK } from './config.js'
@@ -39,6 +39,30 @@ const shareLink = computed(() =>
     ? `${location.origin}${import.meta.env.BASE_URL}#${encodeCircle(circle.value)}`
     : '',
 )
+
+// Opens a circle when the address changes while the page is already open
+// (for example a pasted link, or the example-circle button)
+function syncFromHash() {
+  const hash = location.hash.slice(1)
+  if (!hash) {
+    if (circle.value) circle.value = null
+    return
+  }
+  if (circle.value && encodeCircle(circle.value) === hash) return
+  const c = openFromLink()
+  if (c) {
+    circle.value = c
+    badLink.value = false
+    showCreate.value = false
+    window.scrollTo({ top: 0 })
+  } else {
+    circle.value = null
+    badLink.value = true
+    showCreate.value = true
+  }
+}
+onMounted(() => window.addEventListener('hashchange', syncFromHash))
+onBeforeUnmount(() => window.removeEventListener('hashchange', syncFromHash))
 
 function go(target) {
   circle.value = null

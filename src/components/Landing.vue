@@ -84,6 +84,20 @@ const faqs = [
         </article>
       </div>
     </section>
+        <section v-if="EXAMPLE_LINK" id="example" class="wrap block">
+      <div class="card exbox">
+        <div>
+          <h2>See a real circle</h2>
+          <p>
+            This circle ran on Bitcoin Cash mainnet between three wallets we own: a blockchain draw decided the
+            order, and the payments you will see are real transactions. The schedule is compressed to a few days so
+            you can see every round without waiting a month.
+          </p>
+          <p class="muted">You do not need a wallet or any BCH to look. Choose a member under "Preview as".</p>
+        </div>
+        <a class="linkbtn" :href="EXAMPLE_LINK">Open the example circle</a>
+      </div>
+    </section>
 
     <section id="compare" class="wrap block">
       <h2>Why it is different</h2>
@@ -157,6 +171,9 @@ h1 { font-size: clamp(2rem, 5vw, 3.4rem); }
 .cmp th, .cmp td { padding: 0.65rem 0.8rem; vertical-align: top; }
 .cta-end { text-align: center; padding: 3rem 1rem; }
 .foot { padding-top: 1rem; padding-bottom: 3rem; border-top: 1px solid var(--line); }
+.exbox { display: flex; gap: 1.5rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.exbox > div { flex: 1; min-width: 16rem; }
+.exbox .linkbtn { background: var(--mint); color: #07130E; border: 0; }
 @media (max-width: 860px) {
   .hero { grid-template-columns: 1fr; }
   .steps { grid-template-columns: repeat(2, 1fr); }

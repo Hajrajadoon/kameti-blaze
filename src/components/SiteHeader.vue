@@ -35,7 +35,7 @@ defineEmits(['go', 'section'])
 </template>
 
 <style scoped>
-.top { position: sticky; top: 0; z-index: 20; background: rgba(14, 21, 19, 0.92); backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); }
+.top { position: sticky; top: 0; z-index: 20; background: rgba(14, 21, 19, 0.94); backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); }
 .bar { max-width: 1080px; margin: 0 auto; padding: 0.6rem 1rem; display: flex; align-items: center; gap: 1rem; }
 .brand { display: inline-flex; align-items: center; gap: 0.5rem; background: none; color: var(--ink); padding: 0; min-height: 0; font-size: 1.15rem; font-weight: 700; }
 .brand b { color: var(--mint); }
@@ -46,5 +46,9 @@ nav { display: flex; gap: 0.25rem; flex: 1; }
 .pill { font-size: 0.75rem; padding: 0.2rem 0.55rem; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .pill.warn { color: var(--gold); border-color: #6B5A1E; }
 .pill.ok { color: var(--mint); border-color: #1F6B49; }
-@media (max-width: 760px) { nav { display: none; } .pill.ok { display: none; } }
+@media (max-width: 760px) {
+  .bar { flex-wrap: wrap; gap: 0.4rem 0.75rem; }
+  nav { order: 3; width: 100%; flex: none; overflow-x: auto; white-space: nowrap; }
+  .pill.ok { display: none; }
+}
 </style>

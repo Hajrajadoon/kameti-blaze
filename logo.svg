@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 100" role="img" aria-label="Kameti.cash">
+  <rect width="360" height="100" rx="16" fill="#0E1513"/>
+  <circle cx="44" cy="40" r="21" fill="none" stroke="#3DDC97" stroke-width="7"/>
+  <circle cx="62" cy="40" r="21" fill="none" stroke="#F2C14E" stroke-width="7"/>
+  <circle cx="53" cy="58" r="21" fill="none" stroke="#EAF4EF" stroke-width="7"/>
+  <text x="104" y="62" font-family="Segoe UI, Arial, sans-serif" font-size="40" font-weight="700" fill="#EAF4EF">Kameti<tspan fill="#3DDC97">.cash</tspan></text>
+</svg>

@@ -32,6 +32,7 @@ const view = computed(() => (circle.value ? 'circle' : showCreate.value ? 'creat
 const errors = ref([])
 const creating = ref(false)
 const copyError = ref('')
+const copied = ref(false)
 
 // Links always point to the site root, so they work on localhost and on Vercel
 const shareLink = computed(() =>
@@ -39,6 +40,28 @@ const shareLink = computed(() =>
     ? `${location.origin}${import.meta.env.BASE_URL}#${encodeCircle(circle.value)}`
     : '',
 )
+
+// Copies the share link and shows a short confirmation
+async function copyLink() {
+  copied.value = false
+  try {
+    await navigator.clipboard.writeText(shareLink.value)
+    copied.value = true
+  } catch (e) {
+    // fallback for browsers that block the clipboard API
+    const box = document.createElement('textarea')
+    box.value = shareLink.value
+    document.body.appendChild(box)
+    box.select()
+    try {
+      copied.value = document.execCommand('copy')
+    } catch (err) {
+      copied.value = false
+    }
+    box.remove()
+  }
+  if (copied.value) setTimeout(() => (copied.value = false), 3000)
+}
 
 // Opens a circle when the address changes while the page is already open
 // (for example a pasted link, or the example-circle button)
@@ -161,12 +184,29 @@ async function makeDemoCopy() {
     <div v-else>
       <CircleView :key="shareLink" :circle="circle" @demo-copy="makeDemoCopy" />
       <p v-if="copyError" role="alert">{{ copyError }}</p>
-      <p>Share this link with the other members. Everyone opens the same link and connects their own wallet:</p>
-      <input :value="shareLink" readonly style="width: 100%" />
-      <p v-if="shareLink.length > 2000" class="muted">
-        This link is long. If a chat app cuts it off, send it as a file or in two messages.
-      </p>
-      <p><button type="button" class="secondary" @click="go('create')">Start a new circle</button></p>
+
+      <section class="panel">
+        <h3>Share this circle</h3>
+        <p class="muted">
+          Everyone opens the same link and connects their own wallet. Anyone with the link can look at the circle, and
+          only the members' wallets can pay.
+        </p>
+        <div class="sharebox">
+          <input :value="shareLink" readonly aria-label="Share link" @focus="$event.target.select()" />
+          <button type="button" @click="copyLink">{{ copied ? 'Copied' : 'Copy link' }}</button>
+        </div>
+        <p class="okmsg" role="status" aria-live="polite">{{ copied ? 'Link copied. Send it to the other members.' : '' }}</p>
+        <p v-if="shareLink.length > 2000" class="muted">
+          This link is long. If a chat app cuts it off, send it as a file or in two messages.
+        </p>
+        <button type="button" class="secondary" @click="go('create')">Start a new circle</button>
+      </section>
     </div>
   </main>
 </template>
+
+<style scoped>
+.sharebox { display: flex; gap: 0.5rem; }
+.sharebox input { flex: 1; min-width: 0; padding: 0.5rem; }
+.okmsg { color: var(--mint); min-height: 1.4em; margin: 0.4rem 0; }
+</style>

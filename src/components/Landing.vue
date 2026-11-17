@@ -89,9 +89,9 @@ const faqs = [
         <div>
           <h2>See a real circle</h2>
           <p>
-            This circle ran on Bitcoin Cash mainnet between three wallets we own: a blockchain draw decided the
-            order, and the payments you will see are real transactions. The schedule is compressed to a few days so
-            you can see every round without waiting a month.
+                        This circle runs on Bitcoin Cash mainnet between three wallets we own. A blockchain draw decided the
+            order, and the first round is paid with real transactions you can check. The later rounds open on their
+            real dates, so nothing is staged.
           </p>
           <p class="muted">You do not need a wallet or any BCH to look. Choose a member under "Preview as".</p>
         </div>

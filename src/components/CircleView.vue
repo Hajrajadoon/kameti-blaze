@@ -34,6 +34,7 @@ const tracking = ref(false)
 const trackError = ref('')
 const lastTracked = ref('')
 const circleIdText = ref('')
+let statusSeq = 0 // so an older, slower answer can never replace a newer one
 
 // balance check for reminders
 const balanceInfo = ref(null)
@@ -95,17 +96,39 @@ const idClass = computed(() => {
   return meIdx.value >= 0 && isActive.value ? 'id-ok' : 'id-warn'
 })
 
+// The hash of a block that is already 2 blocks deep never changes, so it is remembered
+const hashKey = h => `kameti-hash-${NETWORK}-${h}`
+function cachedHash(h) {
+  try {
+    const v = localStorage.getItem(hashKey(h))
+    return v && /^[0-9a-f]{64}$/.test(v) ? v : null
+  } catch (e) {
+    return null
+  }
+}
+function saveHash(h, v) {
+  try {
+    localStorage.setItem(hashKey(h), v)
+  } catch (e) {
+    // fine
+  }
+}
+
 async function loadDraw() {
   if (!hasDraw.value) return
   try {
     drawError.value = ''
-    const height = await getHeight()
-    currentHeight.value = height
-    if (height < props.circle.drawHeight + DRAW_CONFIRMATIONS) {
-      drawStatus.value = 'pending'
-      return
+    let hash = cachedHash(props.circle.drawHeight)
+    if (!hash) {
+      const height = await getHeight()
+      currentHeight.value = height
+      if (height < props.circle.drawHeight + DRAW_CONFIRMATIONS) {
+        drawStatus.value = 'pending'
+        return
+      }
+      hash = await getBlockHash(props.circle.drawHeight)
+      saveHash(props.circle.drawHeight, hash)
     }
-    const hash = await getBlockHash(props.circle.drawHeight)
     const id = await circleId(props.circle)
     seq.value = await drawOrder(
       hash,
@@ -145,9 +168,13 @@ async function loadEvents() {
   }
 }
 
+// Seat changes and payments are read at the same time. If a seat change altered the order
+// or the member list, the payments are read once more with the new order.
 async function refreshAll() {
-  await loadEvents()
-  await refreshStatus()
+  const signature = () => effOrder.value.join(',') + '|' + effCircle.value.members.length
+  const before = signature()
+  await Promise.all([loadEvents(), refreshStatus()])
+  if (signature() !== before) await refreshStatus()
 }
 
 // While some change is not in a block yet, look again every 30 seconds
@@ -231,19 +258,37 @@ const myMoneyMoved = computed(() => {
   })
 })
 
+// Shows what was seen last time straight away, then updates it from the blockchain
 async function refreshStatus() {
   if (!orderReady.value) return
+  const mySeq = ++statusSeq
   tracking.value = true
   trackError.value = ''
+  const key = `kameti-paid-${circleIdText.value}-${effOrder.value.join('.')}-${effCircle.value.members.length}`
   try {
+    if (!paid.value.length) {
+      try {
+        const saved = JSON.parse(localStorage.getItem(key) || 'null')
+        if (Array.isArray(saved) && saved.length === rounds.value.length) paid.value = saved
+      } catch (e) {
+        // no saved result: fine
+      }
+    }
     const id = await circleId(props.circle)
-    paid.value = await trackPayments(effCircle.value, rounds.value, id)
+    const result = await trackPayments(effCircle.value, rounds.value, id)
+    if (mySeq !== statusSeq) return
+    paid.value = result
+    try {
+      localStorage.setItem(key, JSON.stringify(result))
+    } catch (e) {
+      // fine
+    }
     lastTracked.value = new Date().toLocaleTimeString()
   } catch (e) {
     console.error('Tracking failed:', e)
-    trackError.value = 'Could not read payments: ' + (e?.message || String(e))
+    if (mySeq === statusSeq) trackError.value = 'Could not read payments: ' + (e?.message || String(e))
   } finally {
-    tracking.value = false
+    if (mySeq === statusSeq) tracking.value = false
   }
 }
 
@@ -382,7 +427,7 @@ async function payRound(round) {
     )
     lastTx.value = result.txid || 'sent'
     lastPaidText.value = `${meName.value} paid ${round.recipient.name} ${formatBch(round.amountSats)} BCH`
-    setTimeout(refreshStatus, 4000)
+    setTimeout(refreshStatus, 2500)
   } catch (e) {
     console.error('Round payment failed:', e)
     errorText.value =

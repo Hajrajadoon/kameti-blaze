@@ -1,13 +1,9 @@
-import {
-  binToHex,
-  hexToBin,
-  decodeTransaction,
-  cashAddressToLockingBytecode,
-} from '@bitauth/libauth'
+import { binToHex, hexToBin } from '@bitauth/libauth'
 import { provider, scanWallet } from './chain.js'
 import { ADDRESS_PREFIX } from './config.js'
 import { sendPayment } from './payment.js'
 import { roundStart, lockTime } from './circle.js'
+import { readTx, getHistory, lockingBytecodeOf, mapLimit, earliestHeight } from './txcache.js'
 
 const TAG = 'KAMETI'
 const KINDS = ['LEAVE', 'JOIN', 'SWAP']
@@ -15,56 +11,8 @@ const EVENT_DUST = 546n // the small amount each note sends to the board address
 const PREPARE_SATS = 5000n // topped up onto the member address when it is empty
 const MIN_ACTOR_SATS = 2000n // enough on the member address to post a note
 
-function lockingBytecodeOf(address) {
-  const r = cashAddressToLockingBytecode(address)
-  if (typeof r === 'string') throw new Error('Bad address: ' + r)
-  return r.bytecode
-}
 const lockingHexOf = address => binToHex(lockingBytecodeOf(address))
 const reverseHex = hex => hex.match(/../g).reverse().join('')
-
-async function scripthashOf(address) {
-  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', lockingBytecodeOf(address)))
-  return binToHex(digest.reverse())
-}
-
-// Reads the text chunks of an OP_RETURN output, or returns null if it is not one
-function parseNote(script) {
-  if (script[0] !== 0x6a) return null
-  const chunks = []
-  let i = 1
-  while (i < script.length) {
-    const op = script[i++]
-    let len
-    if (op >= 1 && op <= 75) len = op
-    else if (op === 0x4c) len = script[i++]
-    else return null
-    if (i + len > script.length) return null
-    chunks.push(new TextDecoder().decode(script.slice(i, i + len)))
-    i += len
-  }
-  return chunks
-}
-
-// A transaction never changes, so we remember what we learned about it
-const txCache = new Map()
-async function readTx(txid) {
-  if (txCache.has(txid)) return txCache.get(txid)
-  const hex = await provider.performRequest('blockchain.transaction.get', txid, false)
-  const tx = decodeTransaction(hexToBin(hex))
-  if (typeof tx === 'string') throw new Error('Could not decode transaction ' + txid)
-  const info = {
-    notes: [],
-    outputs: tx.outputs.map(o => ({ lockingHex: binToHex(o.lockingBytecode) })),
-    inputs: tx.inputs.map(i => ({ txid: binToHex(i.outpointTransactionHash), index: i.outpointIndex })),
-  }
-  for (const out of tx.outputs) {
-    const note = parseNote(out.lockingBytecode)
-    if (note) info.notes.push(note)
-  }
-  txCache.set(txid, info)
-  return info
-}
 
 // Block time from the 80-byte block header (bytes 68 to 71, little endian)
 const timeCache = new Map()
@@ -80,13 +28,21 @@ async function blockTime(height) {
   return ms
 }
 
+// Which byte order the previous-transaction ids use is learned once, so we do not ask twice
+let preferReversed = null
+
 // Did this transaction spend a coin that belongs to `address`? This proves who posted the note.
 async function spendsFrom(info, address) {
   const wanted = lockingHexOf(address)
   for (const input of info.inputs) {
-    for (const candidate of [input.txid, reverseHex(input.txid)]) {
+    const order =
+      preferReversed === true
+        ? [reverseHex(input.txid), input.txid]
+        : [input.txid, reverseHex(input.txid)]
+    for (const candidate of order) {
       try {
         const prev = await readTx(candidate)
+        preferReversed = candidate !== input.txid
         const out = prev.outputs[input.index]
         if (out) {
           if (out.lockingHex === wanted) return true
@@ -163,23 +119,17 @@ export async function publishEvent(
 // Reads every change note posted for this circle (including ones not yet in a block)
 export async function fetchEvents(circle, id) {
   const board = circle.members[0].address
-  const history = await provider.performRequest(
-    'blockchain.scripthash.get_history',
-    await scripthashOf(board),
-  )
+  const history = await getHistory(board, earliestHeight(circle))
+  const infos = await mapLimit(history, 6, entry => readTx(entry.tx_hash))
   const events = []
-  for (const entry of Array.isArray(history) ? history : []) {
-    let info
-    try {
-      info = await readTx(entry.tx_hash)
-    } catch (e) {
-      continue
-    }
+  history.forEach((entry, k) => {
+    const info = infos[k]
+    if (!info) return
     for (const note of info.notes) {
       if (note[0] !== TAG || note[1] !== id || !KINDS.includes(note[2])) continue
       events.push({ kind: note[2], args: note.slice(3), txid: entry.tx_hash, height: entry.height, info })
     }
-  }
+  })
   return events
 }
 
